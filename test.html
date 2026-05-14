@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orient Anything — 물체 방향 측정</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px 60px;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, #6ee7f7, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #6b7280;
+      margin-bottom: 32px;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #6b7280;
+      margin-bottom: 16px;
+    }
+
+    /* Drop zone */
+    #dropzone {
+      border: 2px dashed #3b4263;
+      border-radius: 12px;
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      padding: 20px;
+      position: relative;
+    }
+    #dropzone:hover, #dropzone.dragover {
+      border-color: #7c3aed;
+      background: rgba(124, 58, 237, 0.06);
+    }
+    #dropzone .icon { font-size: 2.5rem; }
+    #dropzone p { color: #9ca3af; font-size: 0.9rem; text-align: center; }
+    #dropzone span { color: #6b7280; font-size: 0.78rem; }
+    #fileInput { display: none; }
+
+    #preview-wrap {
+      display: none;
+      margin-top: 16px;
+      position: relative;
+    }
+    #preview-wrap img {
+      width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #2d3148;
+    }
+    #changeBtn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid #3b4263;
+      color: #e0e0e0;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    #changeBtn:hover { background: rgba(124,58,237,0.5); }
+
+    /* Options */
+    .options-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-label input[type="checkbox"] { display: none; }
+    .toggle {
+      width: 40px;
+      height: 22px;
+      background: #2d3148;
+      border-radius: 11px;
+      position: relative;
+      transition: background 0.2s;
+    }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: #6b7280;
+      border-radius: 50%;
+      transition: left 0.2s, background 0.2s;
+    }
+    input[type="checkbox"]:checked + .toggle { background: #7c3aed; }
+    input[type="checkbox"]:checked + .toggle::after { left: 21px; background: #fff; }
+    .toggle-text { font-size: 0.88rem; color: #c4c9d4; }
+    .toggle-desc { font-size: 0.75rem; color: #5a6070; margin-top: 2px; }
+
+    /* Submit button */
+    #analyzeBtn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #6d28d9, #4f46e5);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 20px;
+      letter-spacing: 0.3px;
+    }
+    #analyzeBtn:hover { opacity: 0.92; }
+    #analyzeBtn:active { transform: scale(0.99); }
+    #analyzeBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Loading */
+    #loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 24px 0;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #2d3148;
+      border-top-color: #7c3aed;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: #6b7280; font-size: 0.88rem; }
+
+    /* Error */
+    #error-box {
+      display: none;
+      background: rgba(220,38,38,0.12);
+      border: 1px solid rgba(220,38,38,0.35);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: #f87171;
+      font-size: 0.88rem;
+      margin-top: 16px;
+    }
+
+    /* Results */
+    #results {
+      display: none;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 600px) {
+      .results-grid { grid-template-columns: 1fr; }
+    }
+
+    #result-img {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #2d3148;
+    }
+
+    .angles-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .angle-item {
+      background: #12151f;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .angle-item.highlight {
+      border-color: #7c3aed;
+      background: rgba(124,58,237,0.08);
+    }
+    .angle-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #6b7280;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .angle-label .badge {
+      background: #7c3aed;
+      color: #fff;
+      font-size: 0.6rem;
+      padding: 1px 6px;
+      border-radius: 20px;
+    }
+    .angle-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #e0e0e0;
+      line-height: 1;
+    }
+    .angle-value .unit {
+      font-size: 1rem;
+      color: #9ca3af;
+      font-weight: 400;
+      margin-left: 3px;
+    }
+    .angle-desc {
+      font-size: 0.75rem;
+      color: #4b5563;
+      margin-top: 4px;
+    }
+
+    /* Arc gauge */
+    .gauge-wrap {
+      margin-top: 10px;
+    }
+    .gauge-track {
+      height: 6px;
+      background: #2d3148;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .gauge-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    /* Confidence */
+    .conf-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .conf-circle {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      flex-shrink: 0;
+    }
+    .conf-circle svg {
+      transform: rotate(-90deg);
+    }
+    .conf-circle .conf-num {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #e0e0e0;
+      transform: none;
+    }
+    .conf-text { font-size: 0.82rem; color: #6b7280; }
+
+    /* Dial for rotation */
+    .dial-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 8px;
+    }
+    .dial-svg { flex-shrink: 0; }
+
+    footer {
+      margin-top: 40px;
+      color: #374151;
+      font-size: 0.75rem;
+    }
+
+    .server-url {
+      font-size: 0.75rem;
+      color: #4b5563;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  </style>
+</head>
+<body>
+
+<h1>Orient Anything</h1>
+<p class="subtitle">이미지 속 물체의 3D 방향 및 사선배치 각도를 측정합니다</p>
+
+<div class="server-url">
+  <div class="dot"></div>
+  서버: <code id="serverAddr">http://localhost:8004</code>
+</div>
+
+<!-- Upload card -->
+<div class="card">
+  <div class="card-title">이미지 업로드</div>
+
+  <div id="dropzone">
+    <div class="icon">🖼️</div>
+    <p>이미지를 드래그하거나 클릭하여 선택하세요</p>
+    <span>JPG, PNG, WEBP · 최대 20MB</span>
+    <input type="file" id="fileInput" accept="image/*" />
+  </div>
+
+  <div id="preview-wrap">
+    <img id="previewImg" src="" alt="preview" />
+    <button id="changeBtn">변경</button>
+  </div>
+
+  <!-- Options -->
+  <div class="card-title" style="margin-top:22px;">옵션</div>
+  <div class="options-row">
+    <label class="toggle-label">
+      <input type="checkbox" id="removeBg" checked />
+      <div class="toggle"></div>
+      <div>
+        <div class="toggle-text">배경 제거 (Remove Background)</div>
+        <div class="toggle-desc">rembg AI로 배경을 제거 후 분석합니다</div>
+      </div>
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="inferAug" />
+      <div class="toggle"></div>
+      <div>
+        <div class="toggle-text">추론 증강 (Inference Augmentation)</div>
+        <div class="toggle-desc">6개 crop 평균으로 정확도를 높입니다 (느림)</div>
+      </div>
+    </label>
+  </div>
+
+  <button id="analyzeBtn" disabled>이미지를 업로드하세요</button>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>모델이 방향을 분석하는 중입니다…</p>
+  </div>
+
+  <div id="error-box"></div>
+</div>
+
+<!-- Results -->
+<div id="results">
+  <div class="card">
+    <div class="card-title">분석 결과</div>
+    <div class="results-grid">
+      <div>
+        <img id="result-img" src="" alt="result" />
+      </div>
+      <div class="angles-wrap">
+
+        <!-- Rotation (사선배치) — highlighted -->
+        <div class="angle-item highlight">
+          <div class="angle-label">
+            사선배치 각도 (Rotation)
+            <span class="badge">핵심</span>
+          </div>
+          <div class="angle-value" id="val-rotation">—<span class="unit">°</span></div>
+          <div class="angle-desc">정면 기준 in-plane 회전각 · 범위 -90° ~ 90°</div>
+          <div class="gauge-wrap">
+            <div class="dial-wrap">
+              <svg class="dial-svg" width="100" height="54" viewBox="0 0 100 54">
+                <!-- background arc -->
+                <path d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke="#2d3148" stroke-width="6" stroke-linecap="round"/>
+                <!-- value arc -->
+                <path id="dial-arc" d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke="#7c3aed" stroke-width="6" stroke-linecap="round"
+                      stroke-dasharray="141.37" stroke-dashoffset="141.37"/>
+                <!-- needle -->
+                <line id="dial-needle" x1="50" y1="50" x2="50" y2="10" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="50" cy="50" r="3" fill="#a78bfa"/>
+              </svg>
+              <div style="font-size:0.75rem;color:#6b7280;line-height:1.5">
+                <div>좌: -90°</div>
+                <div>우: +90°</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Azimuth -->
+        <div class="angle-item">
+          <div class="angle-label">방위각 (Azimuth)</div>
+          <div class="angle-value" id="val-azimuth">—<span class="unit">°</span></div>
+          <div class="angle-desc">수평 회전 방향 (0° = 정면, 시계방향)</div>
+          <div class="gauge-wrap">
+            <div class="gauge-track">
+              <div class="gauge-fill" id="bar-azimuth" style="width:0%;background:linear-gradient(90deg,#06b6d4,#3b82f6)"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Polar -->
+        <div class="angle-item">
+          <div class="angle-label">앙각 / 부각 (Polar)</div>
+          <div class="angle-value" id="val-polar">—<span class="unit">°</span></div>
+          <div class="angle-desc">수직 기울기 · +위쪽 / -아래쪽</div>
+          <div class="gauge-wrap">
+            <div class="gauge-track">
+              <div class="gauge-fill" id="bar-polar" style="width:0%;background:linear-gradient(90deg,#10b981,#34d399)"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Confidence -->
+        <div class="angle-item">
+          <div class="angle-label">신뢰도 (Confidence)</div>
+          <div class="conf-row">
+            <div class="conf-circle">
+              <svg width="60" height="60" viewBox="0 0 60 60">
+                <circle cx="30" cy="30" r="24" fill="none" stroke="#2d3148" stroke-width="5"/>
+                <circle id="conf-ring" cx="30" cy="30" r="24" fill="none"
+                        stroke="#f59e0b" stroke-width="5"
+                        stroke-dasharray="150.796" stroke-dashoffset="150.796"
+                        stroke-linecap="round"/>
+              </svg>
+              <div class="conf-num" id="val-conf">—</div>
+            </div>
+            <div class="conf-text" id="conf-desc">—</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Orient Anything · ICML 2025 · Port 8004</footer>
+
+<script>
+  const SERVER = 'http://localhost:8004';
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const previewWrap = document.getElementById('preview-wrap');
+  const previewImg = document.getElementById('previewImg');
+  const changeBtn = document.getElementById('changeBtn');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const loading = document.getElementById('loading');
+  const errorBox = document.getElementById('error-box');
+  const results = document.getElementById('results');
+
+  let selectedFile = null;
+
+  function showPreview(file) {
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    previewImg.src = url;
+    dropzone.style.display = 'none';
+    previewWrap.style.display = 'block';
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = '방향 분석 시작';
+    errorBox.style.display = 'none';
+    results.style.display = 'none';
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) showPreview(e.target.files[0]); });
+  changeBtn.addEventListener('click', () => {
+    dropzone.style.display = 'flex';
+    previewWrap.style.display = 'none';
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '이미지를 업로드하세요';
+    selectedFile = null;
+    fileInput.value = '';
+  });
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) showPreview(f);
+  });
+
+  analyzeBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    analyzeBtn.disabled = true;
+    loading.style.display = 'flex';
+    errorBox.style.display = 'none';
+    results.style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('do_remove_background', document.getElementById('removeBg').checked);
+    fd.append('do_infer_aug', document.getElementById('inferAug').checked);
+
+    try {
+      const res = await fetch(`${SERVER}/predict`, { method: 'POST', body: fd });
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      // Set result image
+      document.getElementById('result-img').src = 'data:image/jpeg;base64,' + data.result_image;
+
+      // Angles
+      setAngle('val-azimuth', data.azimuth);
+      setAngle('val-polar', data.polar);
+      setAngle('val-rotation', data.rotation);
+
+      // Gauge bars
+      document.getElementById('bar-azimuth').style.width = (data.azimuth / 360 * 100) + '%';
+      const polarPct = ((data.polar + 90) / 180 * 100);
+      document.getElementById('bar-polar').style.width = polarPct + '%';
+
+      // Rotation dial
+      updateDial(data.rotation);
+
+      // Confidence ring
+      const conf = data.confidence;
+      const circ = 150.796;
+      document.getElementById('conf-ring').style.strokeDashoffset = circ * (1 - conf);
+      document.getElementById('val-conf').textContent = (conf * 100).toFixed(0) + '%';
+      document.getElementById('conf-desc').textContent =
+        conf >= 0.8 ? '높음 — 신뢰할 수 있는 결과입니다' :
+        conf >= 0.5 ? '보통 — 참고용으로 사용하세요' :
+        '낮음 — 3D 축 시각화가 생략됩니다';
+
+      results.style.display = 'block';
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (err) {
+      errorBox.textContent = '오류: ' + err.message + '\n\nrun_server.bat으로 서버를 먼저 실행해주세요.';
+      errorBox.style.display = 'block';
+    } finally {
+      loading.style.display = 'none';
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = '다시 분석';
+    }
+  });
+
+  function setAngle(id, value) {
+    const el = document.getElementById(id);
+    el.innerHTML = value + '<span class="unit">°</span>';
+  }
+
+  function updateDial(rotation) {
+    // rotation: -90 to +90 → map to 0..1 for the arc
+    const t = (rotation + 90) / 180; // 0=left, 0.5=center, 1=right
+    // Arc spans 0 to PI (180deg) from left to right
+    // Needle angle: -90deg (left) to +90deg (right) from up
+    const needleAngle = rotation; // degrees from vertical
+    const rad = needleAngle * Math.PI / 180;
+    const cx = 50, cy = 50, r = 40;
+    const nx = cx + r * Math.sin(rad);
+    const ny = cy - r * Math.cos(rad);
+    document.getElementById('dial-needle').setAttribute('x2', nx.toFixed(1));
+    document.getElementById('dial-needle').setAttribute('y2', ny.toFixed(1));
+
+    // Fill arc proportionally
+    const arcLen = 141.37; // half circumference of r=45 arc
+    document.getElementById('dial-arc').style.strokeDashoffset = arcLen * (1 - t);
+  }
+</script>
+</body>
+</html>
